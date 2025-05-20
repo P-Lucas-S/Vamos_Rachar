@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Vamos Rachar!</string>
+    <string name="share_button_description">Compartilhar valor calculado</string>
+    <string name="speak_button_description">Falar valor calculado em voz alta</string>
+</resources>

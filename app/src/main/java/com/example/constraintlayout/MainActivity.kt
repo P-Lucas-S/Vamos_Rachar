@@ -9,7 +9,9 @@ import android.util.Log
 import android.widget.EditText
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import com.google.android.material.floatingactionbutton.FloatingActionButton
+import kotlinx.coroutines.launch
 import java.util.*
 
 class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
@@ -21,6 +23,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var tts: TextToSpeech? = null
     private var valorPorPessoa: Double = 0.0
     private var ttsInitialized = false
+    private lateinit var dataStore: AppDataStore
+
+    private var lastSavedConta: Float = 0f
+    private var lastSavedPessoas: Int = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         try {
@@ -28,6 +34,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             setContentView(R.layout.activity_main)
 
             Log.d("MainActivity", "Iniciando inicialização dos componentes")
+            dataStore = AppDataStore(applicationContext)
 
             edtConta = findViewById(R.id.edtConta)
             edtPessoas = findViewById(R.id.edtPessoas)
@@ -45,11 +52,37 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 tts = null
             }
 
+            lifecycleScope.launch {
+                try {
+                    val savedConta = dataStore.getContaValueOnce()
+                    val savedPessoas = dataStore.getPessoasValueOnce()
+
+                    if (savedConta > 0) {
+                        edtConta.setText(savedConta.toString())
+                        lastSavedConta = savedConta
+                    }
+                    if (savedPessoas > 0) {
+                        edtPessoas.setText(savedPessoas.toString())
+                        lastSavedPessoas = savedPessoas
+                    }
+                } catch (e: Exception) {
+                    Log.e("MainActivity", "Erro ao carregar valores", e)
+                }
+            }
+
             val textWatcher = object : TextWatcher {
+                private var selfChange = false
+
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+
                 override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+
                 override fun afterTextChanged(s: Editable?) {
+                    if (selfChange) return
+                    selfChange = true
                     calcularValor()
+                    saveValues()
+                    selfChange = false
                 }
             }
 
@@ -57,7 +90,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             edtPessoas.addTextChangedListener(textWatcher)
 
             fabShare.setOnClickListener { compartilharValor() }
-            fabSpeak.setOnClickListener { 
+            fabSpeak.setOnClickListener {
                 if (ttsInitialized && tts != null) {
                     falarValor()
                 }
@@ -73,7 +106,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         try {
             val valorTotalStr = edtConta.text.toString()
             val numPessoasStr = edtPessoas.text.toString()
-            
+
             if (valorTotalStr.isEmpty() || numPessoasStr.isEmpty()) {
                 valorPorPessoa = 0.0
                 tvResultado.text = "R$ 0,00"
@@ -89,6 +122,20 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             Log.e("MainActivity", "Erro ao calcular valor", e)
             valorPorPessoa = 0.0
             tvResultado.text = "R$ 0,00"
+        }
+    }
+
+    private fun saveValues() {
+        val valorTotal = edtConta.text.toString().toFloatOrNull() ?: 0f
+        val numPessoas = edtPessoas.text.toString().toIntOrNull() ?: 0
+
+        if (valorTotal != lastSavedConta || numPessoas != lastSavedPessoas) {
+            lifecycleScope.launch {
+                dataStore.saveContaValue(valorTotal)
+                dataStore.savePessoasValue(numPessoas)
+                lastSavedConta = valorTotal
+                lastSavedPessoas = numPessoas
+            }
         }
     }
 
@@ -118,8 +165,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         try {
             if (status == TextToSpeech.SUCCESS) {
                 val result = tts?.setLanguage(Locale("pt", "BR"))
-                ttsInitialized = (result != TextToSpeech.LANG_MISSING_DATA && 
-                                result != TextToSpeech.LANG_NOT_SUPPORTED)
+                ttsInitialized = (result != TextToSpeech.LANG_MISSING_DATA &&
+                        result != TextToSpeech.LANG_NOT_SUPPORTED)
                 Log.d("MainActivity", "TTS inicializado com sucesso: $ttsInitialized")
             } else {
                 Log.e("MainActivity", "Falha na inicialização do TTS: $status")
@@ -142,4 +189,3 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
     }
 }
-
